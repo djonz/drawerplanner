@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planificateur de tiroirs</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,300&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#F5F0E8;--surface:#FDFAF4;--ink:#1C1810;--ink-muted:#6B6254;
+    --accent:#C84B2F;--accent-light:#E8C4BA;--wood:#8B6340;
+    --wood-light:#C4A882;--wood-dark:#5C3D20;--grid:#D4CCBC;--border:#B8AE9C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--ink);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");}
+
+  header{padding:1.25rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .header-left{display:flex;align-items:baseline;gap:1rem;}
+  header h1{font-family:'Fraunces',serif;font-size:1.6rem;font-weight:700;letter-spacing:-0.02em;}
+  .subtitle{font-size:0.62rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.15em;}
+
+  .unit-toggle{display:flex;border:1.5px solid var(--border);border-radius:6px;overflow:hidden;}
+  .unit-btn{padding:0.38rem 0.85rem;font-family:'DM Mono',monospace;font-size:0.72rem;font-weight:500;border:none;cursor:pointer;background:var(--surface);color:var(--ink-muted);transition:all 0.15s;letter-spacing:0.05em;}
+  .unit-btn.active{background:var(--ink);color:var(--bg);}
+
+  .layout{display:grid;grid-template-columns:400px 1fr;min-height:calc(100vh - 66px);}
+
+  .controls{background:var(--surface);border-right:1px solid var(--border);padding:1.5rem;display:flex;flex-direction:column;gap:1.4rem;overflow-y:auto;max-height:calc(100vh - 66px);}
+  .section-label{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.2em;color:var(--ink-muted);margin-bottom:0.65rem;}
+  .input-group{display:flex;flex-direction:column;gap:0.4rem;}
+  .input-group label{font-size:0.7rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.1em;}
+  .input-row{display:flex;align-items:center;gap:0.6rem;}
+  .num-input{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.45rem 0.65rem;font-family:'DM Mono',monospace;font-size:0.95rem;color:var(--ink);width:88px;text-align:center;transition:border-color 0.2s;}
+  .num-input:focus{outline:none;border-color:var(--accent);}
+  .unit-label{font-size:0.7rem;color:var(--ink-muted);min-width:26px;}
+  .slider-wrap{display:flex;flex-direction:column;gap:0.3rem;}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--grid);border-radius:2px;outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;transition:transform 0.15s;}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3);}
+  .slider-labels{display:flex;justify-content:space-between;font-size:0.6rem;color:var(--ink-muted);}
+  .divider{border:none;border-top:1px solid var(--grid);}
+  .fixed-val{font-size:0.95rem;font-weight:500;color:var(--ink);}
+  .fixed-badge{font-size:0.58rem;color:var(--accent);text-transform:uppercase;letter-spacing:0.1em;background:var(--accent-light);padding:0.12rem 0.38rem;border-radius:3px;}
+
+  /* Per-drawer slots */
+  .drawer-slots{display:flex;flex-direction:column;gap:0.45rem;}
+  .drawer-slot{border:1.5px solid var(--border);border-radius:6px;overflow:hidden;transition:border-color 0.2s;}
+  .drawer-slot:hover{border-color:var(--wood-light);}
+  .slot-header{display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.7rem;background:var(--bg);cursor:pointer;user-select:none;}
+  .slot-left{display:flex;align-items:center;gap:0.5rem;}
+  .slot-num{font-size:0.68rem;color:var(--ink-muted);}
+  .slot-right{display:flex;align-items:center;gap:0.6rem;}
+  .slot-model-name{font-size:0.72rem;font-weight:500;color:var(--ink);}
+  .slot-model-dim{font-size:0.62rem;color:var(--ink-muted);}
+  .slot-chevron{font-size:0.55rem;color:var(--ink-muted);transition:transform 0.2s;}
+  .slot-chevron.open{transform:rotate(180deg);}
+  .slot-body{display:none;padding:0.4rem;background:var(--surface);border-top:1px solid var(--grid);}
+  .slot-body.open{display:block;}
+  .model-option{display:flex;align-items:center;gap:0.55rem;padding:0.45rem 0.55rem;border-radius:5px;cursor:pointer;transition:background 0.12s;}
+  .model-option:hover{background:var(--bg);}
+  .model-option.selected{background:var(--accent-light);}
+  .model-radio{width:13px;height:13px;border:2px solid var(--border);border-radius:50%;flex-shrink:0;position:relative;transition:border-color 0.15s;}
+  .model-option.selected .model-radio{border-color:var(--accent);}
+  .model-option.selected .model-radio::after{content:'';position:absolute;inset:2px;background:var(--accent);border-radius:50%;}
+  .model-info{flex:1;}
+  .model-name-opt{font-size:0.72rem;font-weight:500;color:var(--ink);}
+  .model-ref-opt{font-size:0.6rem;color:var(--ink-muted);}
+  .model-dim-badge{font-size:0.62rem;padding:0.1rem 0.38rem;border-radius:3px;background:var(--grid);color:var(--ink-muted);white-space:nowrap;}
+  .model-option.selected .model-dim-badge{background:var(--accent);color:white;}
+
+  /* Summary */
+  .dims-table{width:100%;border-collapse:collapse;font-size:0.72rem;}
+  .dims-table tr{border-bottom:1px solid var(--grid);}
+  .dims-table td{padding:0.42rem 0;color:var(--ink-muted);}
+  .dims-table td:last-child{text-align:right;color:var(--ink);font-weight:500;}
+  .dims-table .total td{color:var(--accent);font-weight:500;border-top:2px solid var(--accent-light);border-bottom:none;}
+
+  /* Toggles */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:0.4rem 0;font-size:0.7rem;color:var(--ink-muted);cursor:pointer;}
+  .toggle{width:33px;height:18px;background:var(--grid);border-radius:10px;position:relative;transition:background 0.2s;flex-shrink:0;}
+  .toggle.on{background:var(--accent);}
+  .toggle::after{content:'';position:absolute;width:12px;height:12px;background:white;border-radius:50%;top:3px;left:3px;transition:left 0.2s;}
+  .toggle.on::after{left:18px;}
+
+  .btn-export{background:var(--ink);color:var(--bg);border:none;border-radius:4px;padding:0.75rem 1.2rem;font-family:'DM Mono',monospace;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.12em;cursor:pointer;transition:background 0.2s,transform 0.1s;display:flex;align-items:center;justify-content:center;gap:0.6rem;}
+  .btn-export:hover{background:var(--accent);}
+  .btn-export:active{transform:scale(0.98);}
+  .btn-export svg{width:13px;height:13px;}
+
+  /* Canvas */
+  .canvas-area{padding:2.5rem;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1.5rem;background:var(--bg);position:relative;}
+  .canvas-area::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px;opacity:0.4;}
+  .plan-title{font-family:'Fraunces',serif;font-size:0.85rem;font-weight:300;font-style:italic;color:var(--ink-muted);position:relative;}
+  .svg-container{position:relative;background:white;box-shadow:0 4px 32px rgba(28,24,16,.12),0 1px 4px rgba(28,24,16,.08);border-radius:2px;}
+  svg#plan{display:block;overflow:visible;}
+  .view-tabs{display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;position:relative;z-index:1;}
+  .view-tab{padding:0.38rem 0.85rem;font-family:'DM Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;background:var(--surface);border:none;cursor:pointer;color:var(--ink-muted);transition:all 0.15s;}
+  .view-tab.active{background:var(--ink);color:var(--bg);}
+  .legend{display:flex;gap:1rem;position:relative;z-index:1;flex-wrap:wrap;justify-content:center;}
+  .legend-item{display:flex;align-items:center;gap:0.4rem;font-size:0.62rem;color:var(--ink-muted);}
+  .legend-swatch{width:11px;height:11px;border-radius:2px;border:1px solid #0003;}
+
+  .panel-row{display:flex;align-items:center;justify-content:space-between;padding:0.38rem 0;border-bottom:1px solid var(--grid);font-size:0.7rem;}
+  .panel-row:last-child{border-bottom:none;}
+  .panel-qty{width:22px;height:22px;border-radius:4px;background:var(--ink);color:var(--bg);font-size:0.65rem;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .panel-desc{flex:1;padding:0 0.6rem;color:var(--ink-muted);}
+  .panel-dim{font-size:0.7rem;font-weight:500;color:var(--ink);white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1 id="appTitle">Planificateur de tiroirs</h1>
+    <span class="subtitle" id="appSubtitle">générateur de plans techniques</span>
+  </div>
+  <div style="display:flex;gap:0.6rem;align-items:center;">
+    <div class="unit-toggle">
+      <button class="unit-btn active" id="btnFR" onclick="setLang('fr')">FR</button>
+      <button class="unit-btn" id="btnEN" onclick="setLang('en')">EN</button>
+    </div>
+    <div class="unit-toggle">
+      <button class="unit-btn active" id="btnMM" onclick="setUnit('mm')">mm</button>
+      <button class="unit-btn" id="btnIN" onclick="setUnit('in')">pouces</button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="controls">
+
+    <div>
+      <div class="section-label" data-i18n="dimSection">Dimensions du meuble</div>
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div class="input-group">
+          <label data-i18n="totalWidth">Largeur totale</label>
+          <div class="input-row">
+            <span class="fixed-val" id="widthDisplay">523,9 mm</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label data-i18n="depth">Profondeur</label>
+          <div class="input-row">
+            <span class="fixed-val" id="depthDisplay">425 mm</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label data-i18n="thickness">Épaisseur panneau</label>
+          <div class="input-row">
+            <input type="number" class="num-input" id="thickness" value="19.05" min="10" max="30" step="1">
+            <span class="unit-label" id="thickUnit">mm</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-label" data-i18n="drawerSection">Configuration des tiroirs</div>
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div class="input-group">
+          <label data-i18n="numDrawers">Nombre de tiroirs</label>
+          <div class="slider-wrap">
+            <div class="input-row">
+              <input type="number" class="num-input" id="drawers" value="4" min="1" max="10" step="1">
+            </div>
+            <input type="range" id="drawersRange" min="1" max="10" step="1" value="4">
+            <div class="slider-labels"><span>1</span><span>10</span></div>
+          </div>
+        </div>
+        <div class="drawer-slots" id="drawerSlots"></div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-label" data-i18n="displaySection">Affichage</div>
+      <div id="toggleCotes" class="toggle-row"><span data-i18n="dimLines">Cotes dimensionnelles</span><div class="toggle on" id="toggleCotesBtn"></div></div>
+      <div id="toggleColors" class="toggle-row"><span data-i18n="modelColors">Couleurs par modèle</span><div class="toggle on" id="toggleColorsBtn"></div></div>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-label" data-i18n="summarySection">Récapitulatif</div>
+      <table class="dims-table" id="summaryTable"></table>
+    </div>
+
+    <hr class="divider">
+
+    <div>
+      <div class="section-label" data-i18n="panelsSection">Liste des panneaux</div>
+      <div id="panelsList"></div>
+    </div>
+
+    <button class="btn-export" id="exportBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+      </svg>
+      <span id="exportBtnLabel" data-i18n="exportBtn">Exporter PDF</span>
+    </button>
+  </aside>
+
+  <main class="canvas-area">
+    <div style="display:flex;align-items:center;gap:1.5rem;position:relative;z-index:1;flex-wrap:wrap;justify-content:center;">
+      <div class="plan-title" id="planTitle">Vue de face — meuble à tiroirs</div>
+      <div class="view-tabs">
+        <button class="view-tab active" id="tabFront" data-i18n="tabFront">Face</button>
+        <button class="view-tab" id="tabSide" data-i18n="tabSide">Côté</button>
+        <button class="view-tab" id="tabTop" data-i18n="tabTop">Dessus</button>
+        <button class="view-tab" id="tabBack" data-i18n="tabBack">Arrière</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="svg-container" id="svgContainer">
+      <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </main>
+</div>
+
+<script>
+const MODELS = {
+  deep:          { name:'DeWalt Deep Pro',      ref:'DWST14825',   height:115, rail:60,  color:'#C4A882', colorDark:'#8B6340' },
+  shallow:       { name:'DeWalt Pro Shallow',   ref:'DWST14925',   height:75,  rail:25,  color:'#A8C4B0', colorDark:'#4A7A60' },
+  craftsman_xl:  { name:'Craftsman XL Pro',     ref:'CMST14520',   height:115, rail:40,  color:'#C4B8A0', colorDark:'#7A5C30' },
+  maximum_deep:  { name:'MAXIMUM Deep',         ref:'#058-1413-6', height:115, rail:65,  color:'#B8C4D4', colorDark:'#3A5A7A' },
+  maximum_sh:    { name:'MAXIMUM Shallow',      ref:'#058-1414-4', height:75,  rail:25,  color:'#C8B8D4', colorDark:'#6A4A7A' },
+};
+
+const MM_PER_IN = 25.4;
+
+const DEPTH_DEFAULT    = 16.75 * 25.4;  // 16 3/4 po = 425.45 mm
+const DEPTH_CRAFTSMAN  = 18.75 * 25.4;  // 18 3/4 po = 476.25 mm
+
+const T = {
+  fr: {
+    appTitle:'Planificateur de tiroirs', appSubtitle:'générateur de plans techniques',
+    dimSection:'Dimensions du meuble', totalWidth:'Largeur totale', depth:'Profondeur', thickness:'Épaisseur panneau',
+    drawerSection:'Configuration des tiroirs', numDrawers:'Nombre de tiroirs',
+    displaySection:'Affichage', dimLines:'Cotes dimensionnelles', modelColors:'Couleurs par modèle',
+    summarySection:'Récapitulatif', panelsSection:'Liste des panneaux', exportBtn:'Exporter PDF',
+    tabFront:'Face', tabSide:'Côté', tabTop:'Dessus', tabBack:'Arrière',
+    titleFront:'Vue de face — meuble à tiroirs', titleSide:'Vue de côté — coupe latérale',
+    titleTop:'Vue de dessus — panneau supérieur', titleBack:'Vue arrière — panneau de dos',
+    unitIn:'pouces', drawer:'Tiroir', railFrom:'rail à', fromBottom:'du bas',
+    summaryWidth:'Largeur', summaryHeight:'Hauteur totale', summaryDepth:'Profondeur',
+    summaryDrawers:'Nb de tiroirs', summaryModels:'Modèles',
+    panelTop:'Panneau dessus', panelBottom:'Panneau dessous', panelSide:'Panneaux de côté', panelBack:'Panneaux arrière',
+    pdfTitle:'Plan de tiroirs — Vue de côté', pdfWidth:'Largeur', pdfHeight:'Hauteur', pdfDepth:'Profondeur', pdfDrawers:'Tiroirs',
+    pdfPanelsTitle:'Liste des panneaux', pdfQty:'Qté', pdfDesc:'Description', pdfW:'Largeur', pdfH:'Hauteur',
+    generating:'Génération…',
+  },
+  en: {
+    appTitle:'Drawer Planner', appSubtitle:'technical plan generator',
+    dimSection:'Cabinet Dimensions', totalWidth:'Total width', depth:'Depth', thickness:'Panel thickness',
+    drawerSection:'Drawer Configuration', numDrawers:'Number of drawers',
+    displaySection:'Display', dimLines:'Dimension lines', modelColors:'Colors by model',
+    summarySection:'Summary', panelsSection:'Panel list', exportBtn:'Export PDF',
+    tabFront:'Front', tabSide:'Side', tabTop:'Top', tabBack:'Back',
+    titleFront:'Front view — drawer cabinet', titleSide:'Side view — cross section',
+    titleTop:'Top view — top panel', titleBack:'Rear view — back panel',
+    unitIn:'inches', drawer:'Drawer', railFrom:'rail at', fromBottom:'from bottom',
+    summaryWidth:'Width', summaryHeight:'Total height', summaryDepth:'Depth',
+    summaryDrawers:'Drawers', summaryModels:'Models',
+    panelTop:'Top panel', panelBottom:'Bottom panel', panelSide:'Side panels', panelBack:'Back panels',
+    pdfTitle:'Drawer plan — Side view', pdfWidth:'Width', pdfHeight:'Height', pdfDepth:'Depth', pdfDrawers:'Drawers',
+    pdfPanelsTitle:'Panel list', pdfQty:'Qty', pdfDesc:'Description', pdfW:'Width', pdfH:'Height',
+    generating:'Generating…',
+  }
+};
+
+const state = {
+  width: 523.875,
+  depth: DEPTH_DEFAULT,
+  thickness: 19.05,
+  drawers: 4,
+  drawerModels: ['deep','deep','deep','deep'],
+  unit: 'mm',
+  lang: 'fr',
+  showCotes: true, showHachures: false, showColors: true,
+  view: 'front',
+  openSlot: null,
+  depthOverridden: false,
+};
+
+function tr(key){ return T[state.lang][key] || key; }
+
+function setLang(l){
+  state.lang = l;
+  document.getElementById('btnFR').classList.toggle('active', l==='fr');
+  document.getElementById('btnEN').classList.toggle('active', l==='en');
+  document.getElementById('appTitle').textContent = tr('appTitle');
+  document.getElementById('appSubtitle').textContent = tr('appSubtitle');
+  document.getElementById('btnIN').textContent = tr('unitIn');
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    el.textContent = tr(el.dataset.i18n);
+  });
+  // Update current plan title
+  const titles = {front:tr('titleFront'),side:tr('titleSide'),top:tr('titleTop'),back:tr('titleBack')};
+  document.getElementById('planTitle').textContent = titles[state.view];
+  renderSlots();
+  render();
+}
+
+// ---- UNIT ----
+function fmtDim(mm) {
+  if (state.unit === 'mm') return `${Math.round(mm)} mm`;
+  return `${toFraction(mm / MM_PER_IN)} po`;
+}
+function toFraction(dec) {
+  const whole = Math.floor(dec);
+  const frac = dec - whole;
+  const fracs = [
+    [0,     ''],
+    [1/16,  '1/16'],[1/8,   '1/8'], [3/16,  '3/16'],[1/4,   '1/4'],
+    [5/16,  '5/16'],[3/8,   '3/8'], [7/16,  '7/16'],[1/2,   '1/2'],
+    [9/16,  '9/16'],[5/8,   '5/8'], [11/16, '11/16'],[3/4,  '3/4'],
+    [13/16, '13/16'],[7/8,  '7/8'], [15/16, '15/16'],[1,    '']
+  ];
+  let best=fracs[0], bestD=Math.abs(frac-fracs[0][0]);
+  fracs.forEach(f=>{const d=Math.abs(frac-f[0]);if(d<bestD){bestD=d;best=f;}});
+  if(best[0]===1) return `${whole+1}`;
+  return whole>0 ? `${whole} ${best[1]}`.trim() : (best[1]||'0');
+}
+function toMM(val) { return state.unit==='mm' ? +val : +val*MM_PER_IN; }
+
+function setUnit(u) {
+  state.unit = u;
+  document.getElementById('btnMM').classList.toggle('active', u==='mm');
+  document.getElementById('btnIN').classList.toggle('active', u==='in');
+  const thickEl=document.getElementById('thickness');
+  if(u==='mm'){
+    document.getElementById('thickUnit').textContent='mm';
+    thickEl.value=Math.round(state.thickness);
+    document.getElementById('widthDisplay').textContent='523,9 mm';
+  } else {
+    document.getElementById('thickUnit').textContent='po';
+    thickEl.value=(state.thickness/MM_PER_IN).toFixed(3);
+    document.getElementById('widthDisplay').textContent='20 5/8 po';
+  }
+  renderSlots();
+  render();
+  updateDepthNote();
+}
+
+// ---- DRAWER SLOTS ----
+function renderSlots() {
+  const n = state.drawers;
+  while(state.drawerModels.length<n) state.drawerModels.push('deep');
+  state.drawerModels.length=n;
+  document.getElementById('drawerSlots').innerHTML = Array.from({length:n},(_,i)=>{
+    const m=MODELS[state.drawerModels[i]];
+    const isOpen=state.openSlot===i;
+    return `<div class="drawer-slot">
+      <div class="slot-header" onclick="toggleSlot(${i})">
+        <div class="slot-left">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid #0003;background:${m.color}"></span>
+          <span class="slot-num">${tr('drawer')} ${i+1}</span>
+        </div>
+        <div class="slot-right">
+          <span class="slot-model-name">${m.name}</span>
+          <span class="slot-model-dim">${fmtDim(m.height)}</span>
+          <span class="slot-chevron${isOpen?' open':''}">▼</span>
+        </div>
+      </div>
+      <div class="slot-body${isOpen?' open':''}">
+        ${Object.entries(MODELS).map(([key,mod])=>`
+          <div class="model-option${state.drawerModels[i]===key?' selected':''}" onclick="setDrawerModel(${i},'${key}')">
+            <div class="model-radio"></div>
+            <div class="model-info">
+              <div class="model-name-opt">${mod.name}</div>
+              <div class="model-ref-opt">${mod.ref} · ${tr('railFrom')} ${fmtDim(mod.rail)} ${tr('fromBottom')}</div>
+            </div>
+            <span class="model-dim-badge">${fmtDim(mod.height)}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleSlot(i){state.openSlot=state.openSlot===i?null:i;renderSlots();}
+function setDrawerModel(i,key){
+  state.drawerModels[i]=key;
+  state.openSlot=null;
+  const hasCraftsman=state.drawerModels.includes('craftsman_xl');
+  state.depth=hasCraftsman ? DEPTH_CRAFTSMAN : DEPTH_DEFAULT;
+  renderSlots();
+  render();
+}
+
+// ---- SYNC ----
+function syncInputs(){
+  const drawersEl=document.getElementById('drawers'),drawersR=document.getElementById('drawersRange');
+  drawersEl.addEventListener('input',()=>{state.drawers=+drawersEl.value;drawersR.value=drawersEl.value;renderSlots();render();});
+  drawersR.addEventListener('input',()=>{state.drawers=+drawersR.value;drawersEl.value=drawersR.value;renderSlots();render();});
+  document.getElementById('thickness').addEventListener('input',e=>{state.thickness=toMM(e.target.value);render();});
+  function tog(rowId,btnId,key){document.getElementById(rowId).addEventListener('click',()=>{state[key]=!state[key];document.getElementById(btnId).classList.toggle('on',state[key]);render();});}
+  tog('toggleCotes','toggleCotesBtn','showCotes');
+  tog('toggleColors','toggleColorsBtn','showColors');
+  ['front','side','top','back'].forEach(v=>{
+    document.getElementById('tab'+v[0].toUpperCase()+v.slice(1)).addEventListener('click',()=>{
+      state.view=v;
+      document.querySelectorAll('.view-tab').forEach(t=>t.classList.remove('active'));
+      document.getElementById('tab'+v[0].toUpperCase()+v.slice(1)).classList.add('active');
+      const titles={front:tr('titleFront'),side:tr('titleSide'),top:tr('titleTop'),back:tr('titleBack')};
+      document.getElementById('planTitle').textContent=titles[v];
+      render();
+    });
+  });
+  document.getElementById('exportBtn').addEventListener('click',exportPDF);
+}
+
+function updateDepthNote(){
+  const hasCraftsman=state.drawerModels.includes('craftsman_xl');
+  const display=document.getElementById('depthDisplay');
+  if(!display) return;
+  const depth=hasCraftsman ? DEPTH_CRAFTSMAN : DEPTH_DEFAULT;
+  display.textContent=fmtDim(depth);
+}
+
+const TOP_MARGIN = 5; // mm extra above top drawer
+
+function getTotalHeight(){
+  let h = 2 * state.thickness + TOP_MARGIN; // top panel + 5mm margin + bottom panel
+  for(let i=0;i<state.drawers;i++) h += MODELS[state.drawerModels[i]].height;
+  return h;
+}
+
+// ---- RENDER ----
+const PAD=130, MAX_W=640, MAX_H=820;
+
+function render(){
+  const s=state, t=s.thickness, totalH=getTotalHeight();
+  let W,H;
+  if(s.view==='top'){W=s.width;H=s.depth;}
+  else if(s.view==='side'){W=s.depth;H=totalH;}
+  else{W=s.width;H=totalH;} // front and back
+  const scale=Math.min((MAX_W-PAD*2)/W,(MAX_H-PAD*2)/H,2);
+  const svgW=W*scale+PAD*2, svgH=H*scale+PAD*2;
+  const svg=document.getElementById('plan');
+  svg.setAttribute('width',svgW);svg.setAttribute('height',svgH);
+  svg.setAttribute('viewBox',`0 0 ${svgW} ${svgH}`);
+  document.getElementById('svgContainer').style.width=svgW+'px';
+  const defs=`<defs>
+    <pattern id="grain" patternUnits="userSpaceOnUse" width="4" height="40" patternTransform="rotate(5)">
+      <line x1="0" y1="0" x2="0" y2="40" stroke="#B8A88A" stroke-width="0.6" opacity="0.4"/>
+      <line x1="2" y1="0" x2="2" y2="40" stroke="#C4A882" stroke-width="0.3" opacity="0.25"/>
+    </pattern>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#8B6340" stroke-width="1" opacity="0.35"/>
+    </pattern>
+    <filter id="shadow" x="-5%" y="-5%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="2" stdDeviation="4" flood-opacity="0.12"/>
+    </filter>
+  </defs>`;
+  const ox=PAD,oy=PAD;
+  let body='';
+  if(s.view==='front') body=drawFront(s,scale,ox,oy,t,totalH);
+  else if(s.view==='side') body=drawSide(s,scale,ox,oy,t,totalH);
+  else if(s.view==='back') body=drawBack(s,scale,ox,oy,t,totalH);
+  else body=drawTop(s,scale,ox,oy,t,totalH);
+  let annos='';
+  if(s.showCotes){
+    if(s.view==='front') annos=annosFront(s,scale,ox,oy,t,totalH);
+    else if(s.view==='side') annos=annosSide(s,scale,ox,oy,t,totalH);
+    else if(s.view==='back') annos=annosBack(s,scale,ox,oy,t,totalH);
+    else annos=annosTop(s,scale,ox,oy);
+  }
+  svg.innerHTML=defs+`<rect width="${svgW}" height="${svgH}" fill="white"/>`+body+annos;
+  updateSummary(s,t,totalH);
+  updateLegend();
+  updateDepthNote();
+  updatePanelsList(s,t,totalH);
+}
+
+function drawFront(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc, H=totalH*sc, stroke='#1C1810';
+  const innerH = totalH - 2*t; // height between top and bottom panels
+
+  // Left and right side panels (interior height only)
+  out+=rect(ox, oy+t*sc, t*sc, innerH*sc, '#C4A882', stroke, 1, 'grain');
+  out+=rect(ox+(s.width-t)*sc, oy+t*sc, t*sc, innerH*sc, '#C4A882', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy+t*sc}" width="${t*sc}" height="${innerH*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox+(s.width-t)*sc}" y="${oy+t*sc}" width="${t*sc}" height="${innerH*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  // Drawers (between side panels, after top margin)
+  const dw=(s.width-2*t)*sc, dx=ox+t*sc;
+  let curY=t+TOP_MARGIN;
+  for(let i=0;i<s.drawers;i++){
+    const mod=MODELS[s.drawerModels[i]];
+    const dh=mod.height, fdy=oy+curY*sc;
+    const fc=s.showColors?mod.color:'#DDD0B8';
+    const fcd=s.showColors?mod.colorDark:'#8B6340';
+    out+=rect(dx+2,fdy+2,dw-4,dh*sc-4,fc,stroke,1,'grain');
+    out+=`<rect x="${dx+4}" y="${fdy+4}" width="${dw-8}" height="${dh*sc-8}" fill="none" stroke="#00000010" stroke-width="3" rx="1"/>`;
+    out+=`<text x="${dx+dw/2}" y="${fdy+dh*sc-9}" text-anchor="middle" font-family="DM Mono,monospace" font-size="8" fill="${fcd}" opacity="0.65">${mod.ref}</text>`;
+    curY+=dh;
+  }
+
+  // Top and bottom panels (full width, on top of sides)
+  out+=rect(ox, oy, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  out+=rect(ox, oy+(totalH-t)*sc, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox}" y="${oy+(totalH-t)*sc}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="none" stroke="${stroke}" stroke-width="2" filter="url(#shadow)"/>`;
+  return out;
+}
+
+function drawSide(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.depth*sc, H=totalH*sc, stroke='#1C1810';
+  const innerH=(totalH-2*t)*sc;
+
+  // Side panel background (interior height)
+  out+=rect(ox, oy+t*sc, W, innerH, '#C4A882', stroke, 1, 'grain');
+  if(s.showHachures) out+=`<rect x="${ox}" y="${oy+t*sc}" width="${t*sc}" height="${innerH}" fill="url(#hatch)" opacity="0.6"/>`;
+
+  // Drawers inside
+  let curY=t+TOP_MARGIN;
+  for(let i=0;i<s.drawers;i++){
+    const mod=MODELS[s.drawerModels[i]];
+    const dh=mod.height, fdy=oy+curY*sc;
+    const fc=s.showColors?mod.color:'#DDD0B8';
+    const dDepth=s.depth*0.82*sc;
+    out+=rect(ox+s.depth*0.18*sc, fdy, dDepth, dh*sc-2, fc, stroke, 0.8);
+    if(s.showHachures) out+=`<rect x="${ox+s.depth*0.18*sc}" y="${fdy}" width="${dDepth}" height="${dh*sc-2}" fill="url(#hatch)" opacity="0.25"/>`;
+    curY+=dh;
+  }
+
+  // Top and bottom panels (full width)
+  out+=rect(ox, oy, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  out+=rect(ox, oy+(totalH-t)*sc, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox}" y="${oy+(totalH-t)*sc}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="none" stroke="${stroke}" stroke-width="2"/>`;
+  return out;
+}
+
+function drawTop(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc, H=s.depth*sc, stroke='#1C1810';
+  out+=rect(ox, oy, W, H, '#8B6340', stroke, 2, 'grain');
+  if(s.showHachures) out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="url(#hatch)" opacity="0.3"/>`;
+  return out;
+}
+
+// ---- ANNOTATIONS ----
+function arrow(x1,y1,x2,y2,label,orient='h'){
+  const c='#C84B2F',aw=5;
+  let out=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="0.8"/>`;
+  if(orient==='h'){
+    out+=`<polygon points="${x1},${y1} ${x1+aw},${y1-3} ${x1+aw},${y1+3}" fill="${c}"/>`;
+    out+=`<polygon points="${x2},${y2} ${x2-aw},${y2-3} ${x2-aw},${y2+3}" fill="${c}"/>`;
+    out+=`<text x="${(x1+x2)/2}" y="${y1-7}" text-anchor="middle" font-family="DM Mono,monospace" font-size="14" fill="${c}">${label}</text>`;
+  } else {
+    out+=`<polygon points="${x1},${y1} ${x1-3},${y1+aw} ${x1+3},${y1+aw}" fill="${c}"/>`;
+    out+=`<polygon points="${x2},${y2} ${x2-3},${y2-aw} ${x2+3},${y2-aw}" fill="${c}"/>`;
+    out+=`<text x="${x1-8}" y="${(y1+y2)/2}" text-anchor="end" font-family="DM Mono,monospace" font-size="14" fill="${c}">${label}</text>`;
+  }
+  return out;
+}
+
+function annosFront(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc,H=totalH*sc,gap=22;
+  const c='#C84B2F', aw=5;
+  const ax=ox+W+gap;
+  out+=arrow(ox,oy-gap,ox+W,oy-gap,fmtDim(s.width),'h');
+  out+=`<line x1="${ax}" y1="${oy}" x2="${ax}" y2="${oy+H}" stroke="${c}" stroke-width="0.8"/>`;
+  out+=`<polygon points="${ax},${oy} ${ax-3},${oy+aw} ${ax+3},${oy+aw}" fill="${c}"/>`;
+  out+=`<polygon points="${ax},${oy+H} ${ax-3},${oy+H-aw} ${ax+3},${oy+H-aw}" fill="${c}"/>`;
+  out+=`<text x="${ax+7}" y="${oy+H/2+3.5}" text-anchor="start" font-family="DM Mono,monospace" font-size="14" fill="${c}">${fmtDim(totalH)}</text>`;
+  return out;
+}
+
+function railAnnotations(s,sc,ox,oy,t,totalH,rightEdgeX){
+  let out='';
+  const c='#C84B2F';
+  const interiorBottom = oy + (totalH - t)*sc;
+  const innerH = totalH - 2*t - TOP_MARGIN; // usable height below the margin
+  const labelX = rightEdgeX + 8;
+  const panelLeft = ox;
+  let heightAbove = 0;
+  for(let i=0;i<s.drawers;i++){
+    const mod=MODELS[s.drawerModels[i]];
+    const dh=mod.height;
+    const absRail = innerH - heightAbove - dh + mod.rail;
+    const railY = interiorBottom - absRail*sc;
+    // Dashed line across the full panel width
+    out+=`<line x1="${panelLeft}" y1="${railY}" x2="${rightEdgeX}" y2="${railY}" stroke="${c}" stroke-width="0.8" stroke-dasharray="5,3" opacity="0.7"/>`;
+    // Tick extending past the right edge
+    out+=`<line x1="${rightEdgeX}" y1="${railY}" x2="${labelX+4}" y2="${railY}" stroke="${c}" stroke-width="1.2"/>`;
+    // Label right at the rail height
+    out+=`<text x="${labelX+6}" y="${railY+3.5}" font-family="DM Mono,monospace" font-size="14" fill="${c}">${fmtDim(absRail)}</text>`;
+    heightAbove += dh;
+  }
+  // 0 mm reference line at the bottom of the side panel
+  const zeroY = interiorBottom;
+  out+=`<line x1="${panelLeft}" y1="${zeroY}" x2="${rightEdgeX}" y2="${zeroY}" stroke="${c}" stroke-width="0.8" stroke-dasharray="5,3" opacity="0.7"/>`;
+  out+=`<line x1="${rightEdgeX}" y1="${zeroY}" x2="${labelX+4}" y2="${zeroY}" stroke="${c}" stroke-width="1.2"/>`;
+  out+=`<text x="${labelX+6}" y="${zeroY+3.5}" font-family="DM Mono,monospace" font-size="14" fill="${c}">0</text>`;
+  return out;
+}
+
+function annosSide(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.depth*sc,H=totalH*sc,gap=22;
+  const innerH=(totalH-2*t)*sc;
+  out+=arrow(ox,oy-gap,ox+W,oy-gap,fmtDim(s.depth),'h');
+  out+=arrow(ox-gap,oy+t*sc,ox-gap,oy+t*sc+innerH,fmtDim(totalH-2*t),'v');
+  out+=railAnnotations(s,sc,ox,oy,t,totalH, ox+W);
+  return out;
+}
+function drawBack(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc, H=totalH*sc, stroke='#1C1810';
+  const backH = 6 * 25.4; // 6 inches in mm
+  const innerW = (s.width - 2*t)*sc; // between side panels
+  const dx = ox + t*sc;
+
+  // Side panels (interior height)
+  const innerH = totalH - 2*t;
+  out+=rect(ox, oy+t*sc, t*sc, innerH*sc, '#C4A882', stroke, 1, 'grain');
+  out+=rect(ox+(s.width-t)*sc, oy+t*sc, t*sc, innerH*sc, '#C4A882', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy+t*sc}" width="${t*sc}" height="${innerH*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox+(s.width-t)*sc}" y="${oy+t*sc}" width="${t*sc}" height="${innerH*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  // Top back panel (6 po, just below top panel)
+  const topPanelY = oy + t*sc;
+  out+=rect(dx+2, topPanelY+2, innerW-4, backH*sc-4, '#A09070', stroke, 1, 'grain');
+  out+=`<rect x="${dx+4}" y="${topPanelY+4}" width="${innerW-8}" height="${backH*sc-8}" fill="none" stroke="#00000010" stroke-width="2" rx="1"/>`;
+  out+=`<text x="${dx+innerW/2}" y="${topPanelY+backH*sc/2+3}" text-anchor="middle" font-family="DM Mono,monospace" font-size="8" fill="#5C3D20" opacity="0.7">panneau haut · 6 po</text>`;
+  if(s.showHachures) out+=`<rect x="${dx+2}" y="${topPanelY+2}" width="${innerW-4}" height="${backH*sc-4}" fill="url(#hatch)" opacity="0.3"/>`;
+
+  // Bottom back panel (6 po, just above bottom panel)
+  const botPanelY = oy + (totalH - t)*sc - backH*sc;
+  out+=rect(dx+2, botPanelY+2, innerW-4, backH*sc-4, '#A09070', stroke, 1, 'grain');
+  out+=`<rect x="${dx+4}" y="${botPanelY+4}" width="${innerW-8}" height="${backH*sc-8}" fill="none" stroke="#00000010" stroke-width="2" rx="1"/>`;
+  out+=`<text x="${dx+innerW/2}" y="${botPanelY+backH*sc/2+3}" text-anchor="middle" font-family="DM Mono,monospace" font-size="8" fill="#5C3D20" opacity="0.7">panneau bas · 6 po</text>`;
+  if(s.showHachures) out+=`<rect x="${dx+2}" y="${botPanelY+2}" width="${innerW-4}" height="${backH*sc-4}" fill="url(#hatch)" opacity="0.3"/>`;
+
+  // Top and bottom full-width panels
+  out+=rect(ox, oy, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  out+=rect(ox, oy+(totalH-t)*sc, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox}" y="${oy+(totalH-t)*sc}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="none" stroke="${stroke}" stroke-width="2" filter="url(#shadow)"/>`;
+  return out;
+}
+
+function annosBack(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc, H=totalH*sc, gap=22;
+  const c='#C84B2F', aw=5, ax=ox+W+gap;
+  const backH = 6 * 25.4;
+  const innerW=(s.width-2*t)*sc, dx=ox+t*sc;
+
+  // Width (inner)
+  out+=arrow(dx, oy-gap, dx+innerW, oy-gap, fmtDim(s.width-2*t), 'h');
+  // Total height right of arrow
+  out+=`<line x1="${ax}" y1="${oy}" x2="${ax}" y2="${oy+H}" stroke="${c}" stroke-width="0.8"/>`;
+  out+=`<polygon points="${ax},${oy} ${ax-3},${oy+aw} ${ax+3},${oy+aw}" fill="${c}"/>`;
+  out+=`<polygon points="${ax},${oy+H} ${ax-3},${oy+H-aw} ${ax+3},${oy+H-aw}" fill="${c}"/>`;
+  out+=`<text x="${ax+7}" y="${oy+H/2+3.5}" text-anchor="start" font-family="DM Mono,monospace" font-size="14" fill="${c}">${fmtDim(totalH)}</text>`;
+  // Top back panel height
+  out+=arrow(ox-gap, oy+t*sc, ox-gap, oy+t*sc+backH*sc, fmtDim(backH), 'v');
+  // Bottom back panel height
+  out+=arrow(ox-gap, oy+(totalH-t)*sc-backH*sc, ox-gap, oy+(totalH-t)*sc, fmtDim(backH), 'v');
+  return out;
+}
+
+function drawBack(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc, H=totalH*sc, stroke='#1C1810';
+  const backH=6*25.4; // 6 po en mm
+  const innerW=(s.width-2*t)*sc;
+  const dx=ox+t*sc;
+  const innerH=totalH-2*t;
+
+  // Panneaux de côté (hauteur intérieure)
+  out+=rect(ox, oy+t*sc, t*sc, innerH*sc, '#C4A882', stroke, 1, 'grain');
+  out+=rect(ox+(s.width-t)*sc, oy+t*sc, t*sc, innerH*sc, '#C4A882', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy+t*sc}" width="${t*sc}" height="${innerH*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox+(s.width-t)*sc}" y="${oy+t*sc}" width="${t*sc}" height="${innerH*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  // Panneau arrière du haut (6 po, juste sous le panneau du dessus)
+  const topY=oy+t*sc;
+  out+=rect(dx+2, topY+2, innerW-4, backH*sc-4, '#A09070', stroke, 1, 'grain');
+  out+=`<rect x="${dx+4}" y="${topY+4}" width="${innerW-8}" height="${backH*sc-8}" fill="none" stroke="#00000010" stroke-width="2" rx="1"/>`;
+  if(s.showHachures) out+=`<rect x="${dx+2}" y="${topY+2}" width="${innerW-4}" height="${backH*sc-4}" fill="url(#hatch)" opacity="0.3"/>`;
+
+  // Panneau arrière du bas (6 po, juste au-dessus du panneau du dessous)
+  const botY=oy+(totalH-t)*sc-backH*sc;
+  out+=rect(dx+2, botY+2, innerW-4, backH*sc-4, '#A09070', stroke, 1, 'grain');
+  out+=`<rect x="${dx+4}" y="${botY+4}" width="${innerW-8}" height="${backH*sc-8}" fill="none" stroke="#00000010" stroke-width="2" rx="1"/>`;
+  if(s.showHachures) out+=`<rect x="${dx+2}" y="${botY+2}" width="${innerW-4}" height="${backH*sc-4}" fill="url(#hatch)" opacity="0.3"/>`;
+
+  // Panneaux du dessus et du dessous (pleine largeur)
+  out+=rect(ox, oy, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  out+=rect(ox, oy+(totalH-t)*sc, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  if(s.showHachures){
+    out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+    out+=`<rect x="${ox}" y="${oy+(totalH-t)*sc}" width="${W}" height="${t*sc}" fill="url(#hatch)" opacity="0.5"/>`;
+  }
+
+  out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="none" stroke="${stroke}" stroke-width="2" filter="url(#shadow)"/>`;
+  return out;
+}
+
+function annosBack(s,sc,ox,oy,t,totalH){
+  let out='';
+  const W=s.width*sc, H=totalH*sc, gap=22;
+  const c='#C84B2F', aw=5;
+  const backH=6*25.4;
+  const innerW=(s.width-2*t)*sc, dx=ox+t*sc;
+  const ax=ox+W+gap;
+
+  // Largeur intérieure (entre les côtés)
+  out+=arrow(dx, oy-gap, dx+innerW, oy-gap, fmtDim(s.width-2*t), 'h');
+  // Hauteur du panneau haut (6 po) à gauche
+  out+=arrow(ox-gap, oy+t*sc, ox-gap, oy+t*sc+backH*sc, fmtDim(backH), 'v');
+  // Hauteur du panneau bas (6 po) à gauche
+  out+=arrow(ox-gap, oy+(totalH-t)*sc-backH*sc, ox-gap, oy+(totalH-t)*sc, fmtDim(backH), 'v');
+  return out;
+}
+
+function annosTop(s,sc,ox,oy){
+  let out='';
+  const W=s.width*sc,H=s.depth*sc,gap=22;
+  const c='#C84B2F',aw=5,ax=ox+W+gap;
+  out+=arrow(ox,oy-gap,ox+W,oy-gap,fmtDim(s.width),'h');
+  out+=`<line x1="${ax}" y1="${oy}" x2="${ax}" y2="${oy+H}" stroke="${c}" stroke-width="0.8"/>`;
+  out+=`<polygon points="${ax},${oy} ${ax-3},${oy+aw} ${ax+3},${oy+aw}" fill="${c}"/>`;
+  out+=`<polygon points="${ax},${oy+H} ${ax-3},${oy+H-aw} ${ax+3},${oy+H-aw}" fill="${c}"/>`;
+  out+=`<text x="${ax+7}" y="${oy+H/2+3.5}" text-anchor="start" font-family="DM Mono,monospace" font-size="14" fill="${c}">${fmtDim(s.depth)}</text>`;
+  return out;
+}
+
+function rect(x,y,w,h,fill,stroke,sw=1,pattern=null){
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`+
+    (pattern?`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#${pattern})" stroke="none"/>`:'');
+}
+
+function updateLegend(){
+  const used=[...new Set(state.drawerModels)];
+  const el=document.getElementById('legend');
+  if(!state.showColors||used.length<2){el.innerHTML='';return;}
+  el.innerHTML=used.map(key=>{const m=MODELS[key];return `<div class="legend-item"><div class="legend-swatch" style="background:${m.color};border-color:${m.colorDark}"></div><span>${m.name} — ${fmtDim(m.height)}</span></div>`;}).join('');
+}
+
+function updateSummary(s,t,totalH){
+  const counts={};
+  s.drawerModels.forEach(m=>counts[m]=(counts[m]||0)+1);
+  const modelSummary=Object.entries(counts).map(([k,n])=>`${n}× ${MODELS[k].ref}`).join(', ');
+  const rows=[
+    [tr('summaryWidth'),fmtDim(s.width)],
+    [tr('summaryHeight'),fmtDim(totalH)],
+    [tr('summaryDepth'),fmtDim(s.depth)],
+    [tr('summaryDrawers'),s.drawers],
+    [tr('summaryModels'),modelSummary],
+  ];
+  document.getElementById('summaryTable').innerHTML=
+    rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+
+function updatePanelsList(s,t,totalH){
+  const el=document.getElementById('panelsList');
+  if(!el) return;
+  const innerH=totalH-2*t;
+  const innerW=s.width-2*t;
+  const backPanelH=6*25.4;
+  const panels=[];
+
+  // Dessus et dessous (pleine largeur)
+  panels.push({qty:1, desc:tr('panelTop'),    w:s.width, h:s.depth});
+  panels.push({qty:1, desc:tr('panelBottom'), w:s.width, h:s.depth});
+
+  // Côtés
+  panels.push({qty:2, desc:tr('panelSide'),   w:s.depth, h:innerH});
+
+  // Panneaux arrière (2 × 6 po)
+  panels.push({qty:2, desc:tr('panelBack'),   w:innerW,  h:backPanelH});
+
+  el.innerHTML=panels.map(p=>`
+    <div class="panel-row">
+      <div class="panel-qty">${p.qty}</div>
+      <div class="panel-desc">${p.desc}</div>
+      <div class="panel-dim">${fmtDim(p.w)} × ${fmtDim(p.h)}</div>
+    </div>`).join('');
+}
+
+async function exportPDF(){
+  const btn=document.getElementById('exportBtn');
+  const lbl=document.getElementById('exportBtnLabel');
+  btn.disabled=true; lbl.textContent=tr('generating');
+
+  const savedView=state.view;
+  state.view='side';
+  render();
+  await new Promise(r=>setTimeout(r,80));
+
+  const { jsPDF } = window.jspdf;
+  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pageW=210, margin=14;
+  const s=state, thickness=s.thickness, totalH=getTotalHeight();
+
+  // ---- Titre ----
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(13);
+  pdf.text(tr('pdfTitle'), margin, margin+2);
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(8); pdf.setTextColor(100,100,100);
+  pdf.text(`${tr('pdfWidth')}: ${fmtDim(s.width)}  ·  ${tr('pdfHeight')}: ${fmtDim(totalH)}  ·  ${tr('pdfDepth')}: ${fmtDim(s.depth)}  ·  ${tr('pdfDrawers')}: ${s.drawers}`, margin, margin+8);
+  pdf.setTextColor(0,0,0);
+
+  // ---- Vue de côté ----
+  const svgEl=document.getElementById('plan');
+  const svgData=new XMLSerializer().serializeToString(svgEl);
+  const svgBlob=new Blob([svgData],{type:'image/svg+xml;charset=utf-8'});
+  const url=URL.createObjectURL(svgBlob);
+
+  await new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      const scale=3;
+      const vb=svgEl.viewBox.baseVal;
+      canvas.width=(vb.width||svgEl.width.baseVal.value)*scale;
+      canvas.height=(vb.height||svgEl.height.baseVal.value)*scale;
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='white'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.scale(scale,scale);
+      ctx.drawImage(img,0,0);
+      URL.revokeObjectURL(url);
+      const imgData=canvas.toDataURL('image/png');
+      const maxW=pageW-margin*2, maxH=150;
+      const aspect=canvas.width/canvas.height;
+      let iw=maxW, ih=maxW/aspect;
+      if(ih>maxH){ih=maxH; iw=ih*aspect;}
+      const ix=margin+(maxW-iw)/2;
+      pdf.addImage(imgData,'PNG',ix,margin+13,iw,ih);
+      resolve();
+    };
+    img.src=url;
+  });
+
+  // ---- Liste des panneaux ----
+  const innerH=totalH-2*thickness;
+  const innerW=s.width-2*thickness;
+  const backPanelH=6*25.4;
+  const panels=[
+    {qty:1, desc:tr('panelTop'),    w:s.width,  h:s.depth},
+    {qty:1, desc:tr('panelBottom'), w:s.width,  h:s.depth},
+    {qty:2, desc:tr('panelSide'),   w:s.depth,  h:innerH},
+    {qty:2, desc:tr('panelBack'),   w:innerW,   h:backPanelH},
+  ];
+
+  const tableY=margin+13+155;
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(9); pdf.setTextColor(0,0,0);
+  pdf.text(tr('pdfPanelsTitle'), margin, tableY);
+
+  const col=[margin, margin+14, margin+90, margin+145];
+  const rowH=7;
+  let y=tableY+6;
+  pdf.setFillColor(30,24,16); pdf.rect(margin, y-4.5, pageW-margin*2, rowH, 'F');
+  pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5); pdf.setTextColor(245,240,232);
+  pdf.text(tr('pdfQty'), col[0]+1, y);
+  pdf.text(tr('pdfDesc'), col[1], y);
+  pdf.text(tr('pdfW'), col[2], y);
+  pdf.text(tr('pdfH'), col[3], y);
+  y+=rowH;
+
+  pdf.setFont('helvetica','normal'); pdf.setFontSize(8);
+  panels.forEach((p,i)=>{
+    if(i%2===0) pdf.setFillColor(248,245,238);
+    else pdf.setFillColor(255,255,255);
+    pdf.rect(margin, y-4.5, pageW-margin*2, rowH, 'F');
+    pdf.setTextColor(28,24,16);
+    pdf.text(String(p.qty), col[0]+2, y);
+    pdf.text(p.desc, col[1], y);
+    pdf.text(fmtDim(p.w), col[2], y);
+    pdf.text(fmtDim(p.h), col[3], y);
+    y+=rowH;
+  });
+
+  // Bordure tableau
+  pdf.setDrawColor(180,174,156); pdf.setLineWidth(0.3);
+  pdf.rect(margin, tableY+1.5, pageW-margin*2, y-tableY-1.5);
+
+  // Restaurer vue
+  state.view=savedView;
+  render();
+
+  pdf.save(`plan-tiroirs-${s.drawers}t.pdf`);
+  btn.disabled=false; lbl.textContent=tr('exportBtn');
+}
+
+syncInputs();
+renderSlots();
+render();
+</script>
+</body>
+</html>
