@@ -539,20 +539,20 @@ function drawFront(s,sc,ox,oy,t,totalH){
 }
 
 function drawSide(s,sc,ox,oy,t,totalH){
-  let out='';
+  let inner='';
   const W=s.depth*sc, H=totalH*sc, stroke='#1C1810';
   const innerH=(totalH-2*t)*sc;
 
   // Panneau de côté (fond intérieur)
-  out+=rect(ox, oy+t*sc, W, innerH, '#C4A882', stroke, 1, 'grain');
+  inner+=rect(ox, oy+t*sc, W, innerH, '#C4A882', stroke, 1, 'grain');
 
   // Panneaux arrières (2 × 6 po) — collés sur le bord droit (arrière du meuble)
   const backH = 6 * 25.4;
-  const backX = ox + W - t*sc; // bord arrière
+  const backX = ox + W - t*sc;
   const topPanelY = oy + t*sc;
   const botPanelY = oy + (totalH - t)*sc - backH*sc;
-  out+=rect(backX, topPanelY, t*sc, backH*sc, '#A09070', stroke, 0.8, 'grain');
-  out+=rect(backX, botPanelY, t*sc, backH*sc, '#A09070', stroke, 0.8, 'grain');
+  inner+=rect(backX, topPanelY, t*sc, backH*sc, '#A09070', stroke, 0.8, 'grain');
+  inner+=rect(backX, botPanelY, t*sc, backH*sc, '#A09070', stroke, 0.8, 'grain');
 
   // Rails — profondeur selon le modèle, centrés sur mod.rail depuis le bas du tiroir
   const RAIL_H_MM = 45;
@@ -564,20 +564,21 @@ function drawSide(s,sc,ox,oy,t,totalH){
     const railH = RAIL_H_MM*sc;
     const railCenterY = fdy + (dh - mod.rail)*sc;
     const railTop = railCenterY - railH/2;
-    const railDepthPx = mod.railDepth*sc; // profondeur spécifique au modèle
-    // Le rail part du bord avant (ox) vers l'arrière
-    out+=rect(ox, railTop, railDepthPx, railH, '#A0A8B0', '#5A6070', 0.8);
-    out+=`<rect x="${ox+2}" y="${railTop+3}" width="${railDepthPx-4}" height="${railH-6}" fill="none" stroke="#ffffff30" stroke-width="1" rx="1"/>`;
-    out+=`<line x1="${ox+6}" y1="${railTop+railH/2}" x2="${ox+railDepthPx-6}" y2="${railTop+railH/2}" stroke="#ffffff25" stroke-width="1.5"/>`;
+    const railDepthPx = mod.railDepth*sc;
+    inner+=rect(ox, railTop, railDepthPx, railH, '#A0A8B0', '#5A6070', 0.8);
+    inner+=`<rect x="${ox+2}" y="${railTop+3}" width="${railDepthPx-4}" height="${railH-6}" fill="none" stroke="#ffffff30" stroke-width="1" rx="1"/>`;
+    inner+=`<line x1="${ox+6}" y1="${railTop+railH/2}" x2="${ox+railDepthPx-6}" y2="${railTop+railH/2}" stroke="#ffffff25" stroke-width="1.5"/>`;
     curY += dh;
   }
 
   // Panneaux dessus et dessous (pleine largeur)
-  out+=rect(ox, oy, W, t*sc, '#8B6340', stroke, 1, 'grain');
-  out+=rect(ox, oy+(totalH-t)*sc, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  inner+=rect(ox, oy, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  inner+=rect(ox, oy+(totalH-t)*sc, W, t*sc, '#8B6340', stroke, 1, 'grain');
+  inner+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="none" stroke="${stroke}" stroke-width="2"/>`;
 
-  out+=`<rect x="${ox}" y="${oy}" width="${W}" height="${H}" fill="none" stroke="${stroke}" stroke-width="2"/>`;
-  return out;
+  // Miroir horizontal : l'avant du meuble à droite, l'arrière à gauche
+  const cx = ox + W/2;
+  return `<g transform="scale(-1,1) translate(${-2*cx},0)">${inner}</g>`;
 }
 
 function drawTop(s,sc,ox,oy,t,totalH){
