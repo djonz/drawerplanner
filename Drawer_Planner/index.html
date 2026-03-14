@@ -21,7 +21,7 @@
   .header-left{display:flex;align-items:center;gap:0.9rem;}
   .logo-wrap{display:flex;align-items:center;gap:0.55rem;text-decoration:none;}
   .logo-wrap svg{width:32px;height:32px;flex-shrink:0;}
-  .logo-name{font-family:'Trebuchet MS','Gill Sans',sans-serif;font-size:1.15rem;font-weight:700;letter-spacing:-0.01em;line-height:1;}
+  .logo-name{font-family:'Trebuchet MS','Gill Sans',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-0.01em;line-height:1;}
   .logo-name .jo{background:linear-gradient(135deg,#00C9A7,#0077FF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
   .header-divider{width:1px;height:22px;background:var(--border);}
   header h1{font-family:'Fraunces',serif;font-size:1.4rem;font-weight:700;letter-spacing:-0.02em;}
@@ -313,7 +313,8 @@ function setLang(l){
 // ---- UNIT ----
 function fmtDim(mm) {
   if (state.unit === 'mm') return `${Math.round(mm)} mm`;
-  return `${toFraction(mm / MM_PER_IN)} po`;
+  const unitLabel = state.lang === 'fr' ? 'po' : 'in';
+  return `${toFraction(mm / MM_PER_IN)} ${unitLabel}`;
 }
 function toFraction(dec) {
   const whole = Math.floor(dec);
@@ -341,7 +342,7 @@ function setUnit(u) {
     document.getElementById('thickUnit').textContent='mm';
     thickEl.value=Math.round(state.thickness);
   } else {
-    document.getElementById('thickUnit').textContent='po';
+    document.getElementById('thickUnit').textContent = state.lang === 'fr' ? 'po' : 'in';
     thickEl.value=(state.thickness/MM_PER_IN).toFixed(3);
   }
   renderSlots();
